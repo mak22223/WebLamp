@@ -8,13 +8,14 @@
   1.0 - релиз
 */
 
-#define LED_PIN D1    // пин ленты
-#define BTN_PIN D2    // пин кнопки
-#define PIR_PIN D5    // пин PIR (ИК-датчика)
+#define LED_PIN D3    // пин ленты
+#define BTN_PIN D7    // пин кнопки
+#define PIR_PIN D8    // пин PIR (ИК-датчика)
 #define LED_AMOUNT 18 // кол-во светодиодов
 #define BTN_LEVEL 1   // 1 - кнопка подключает VCC, 0 - подключает GND
 #define USE_PIR 1     // 1 - использовать PIR (ИК-датчик) на этой лампе
 #define IGNORE_PIR 0  // 1 - игнорировать сигнал PIR (ИК датчика) с удалённой лампы
+
 
 /*
   Запуск:
@@ -44,6 +45,8 @@
 #include <FastLED.h>
 #define EB_STEP 100   // период step шага кнопки
 #include <EncButton.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 #include "Timer.h"
 
 // ============= ДАННЫЕ =============
@@ -61,6 +64,10 @@ struct LampData {
   char local[20] = "AG_lamp_1";
   char remote[20] = "AG_lamp_2";
   char host[32] = "broker.mqttdashboard.com";
+  int nightEnd = 8, nightStart = 20;
+  char ntpUrl[32] = "ntp1.stratum2.ru";
+  int ntpTimezone = 3;
+  bool nightModeEn = true;
   uint16_t port = 1883;
   uint8_t ip[4] = {0, 0, 0, 0};
 
@@ -69,6 +76,8 @@ struct LampData {
   uint8_t color = 0;
 };
 
+WiFiUDP ntpUdp;
+NTPClient ntpTime(ntpUdp);
 LampData data;
 EncButton<EB_TICK, BTN_PIN> btn;
 CRGB leds[LED_AMOUNT];
@@ -100,7 +109,10 @@ void brightLoop(int from, int to, int step);
 void loadAnimation(CRGB color);
 int getFromIndex(char* str, int idx, char div = ',');
 
-
+// поместить в объект отвечающий за время
+inline bool isNight() {
+  return (ntpTime.getHours() < data.nightEnd || ntpTime.getHours() >= data.nightStart) && data.nightModeEn ? true : false;
+}
 
 //////////////////////////////////////////////////
 
@@ -109,7 +121,7 @@ void webfaceBuilder() {
   BUILD_BEGIN(s);
 
   add.THEME(GP_DARK);
-  add.AJAX_UPDATE("ledL,ledR,ledP,sw,br,col", 2000);
+  add.AJAX_UPDATE("ledL,ledR,ledP,sw,br,col,nm", 2000);
 
   add.LABEL("STATUS");
   add.BLOCK_BEGIN();
@@ -150,6 +162,26 @@ void webfaceBuilder() {
   add.BREAK();
   add.NUMBER("port", "Port", data.port);
   add.BLOCK_END();
+
+  add.LABEL("NTP");
+  add.BLOCK_BEGIN();
+  add.LABEL("Night mode enable");
+  add.SWITCH("nm", data.nightModeEn);
+  add.BREAK();
+  add.LABEL("Night end");
+  add.NUMBER("nightEnd", "Night end, h", data.nightEnd);
+  add.BREAK();
+  add.LABEL("Night start");
+  add.NUMBER("nightStart", "Night start, h", data.nightStart);
+  add.BREAK();
+  add.LABEL("NTP Server URL");
+  add.TEXT("ntpSrv", "NTP Server URL", data.ntpUrl);
+  add.BREAK();
+  add.LABEL("Timezone");
+  add.SELECT("timezone", "UTC-12,UTC-11,UTC-10,UTC-9,UTC-8,UTC-7,UTC-6,\
+UTC-5,UTC-4,UTC-3,UTC-2,UTC-1,UTC+0,UTC+1,UTC+2,UTC+3,UTC+4,\
+UTC+5,UTC+6,UTC+7,UTC+8,UTC+9,UTC+10,UTC+11,UTC+12", data.ntpTimezone + 12);
+  add.BLOCK_END();
   add.SUBMIT("Save");
 
   add.FORM_END();
@@ -182,14 +214,14 @@ void buttonTick() {
   static int8_t dir = 10;
   if (btn.step()) {
     data.bright = constrain(data.bright + dir, 0, 255);
-    if (data.bright == 255) {
+    /*if (data.bright == 255) {
       FastLED.setBrightness(0);
       FastLED.show();
       delay(150);
       FastLED.setBrightness(255);
       FastLED.show();
       delay(150);
-    }
+    }*/
   }
   if (btn.releaseStep()) {
     dir = -dir;
@@ -209,7 +241,12 @@ bool checkPortal() {
       data.color = portal.getInt("col");
       sendPacket();
     }
-    if (portal.click()) memory.update();
+    if (portal.click("nm")) {
+      data.nightModeEn = portal.getCheck("nm");
+    }
+    if (portal.click()) {
+      memory.update();
+    }
   }
 
   // обновления
@@ -220,6 +257,7 @@ bool checkPortal() {
     if (portal.update("br")) portal.answer(data.bright);
     if (portal.update("sw")) portal.answer(data.power);
     if (portal.update("col")) portal.answer(data.color);
+    if (portal.update("nm")) portal.answer(data.nightModeEn);
   }
 
   // формы
@@ -231,6 +269,21 @@ bool checkPortal() {
       portal.copyStr("remote", data.remote);
       portal.copyStr("host", data.host);
       data.port = portal.getInt("port");
+
+      int tempNightEnd = portal.getInt("nightEnd");
+      int tempNightStart = portal.getInt("nightStart");
+      if (tempNightEnd < tempNightStart) {
+        data.nightEnd = tempNightEnd;
+        data.nightStart = tempNightStart;
+      }
+      portal.copyStr("ntpSrv", data.ntpUrl);
+
+      char timezone[8];
+      portal.copyStr("timezone", timezone);
+      for (int i = 3; i < 7; ++i) {
+        timezone[i - 3] = timezone[i];
+      }
+      data.ntpTimezone = atoi(timezone);
 
       memory.updateNow();
       mqtt.disconnect();
@@ -272,7 +325,10 @@ void connectMQTT() {
   id += String(random(0xffffff), HEX);
   //DEBUGLN(id);
   // подписываемся на своё имя
-  if (mqtt.connect(id.c_str())) mqtt.subscribe(data.local);
+  if (mqtt.connect(id.c_str())) {
+    mqtt.subscribe(data.local);
+  }
+  /// TODO: убрать
   delay(1000);
 }
 
@@ -324,7 +380,7 @@ void sendPacket() {
 void heartbeat() {
   if (hbTmr.period()) {
     // GWL:0,pir
-    char str[hLen + 4] = MQTT_HEADER "0,";  // +0,
+    char str[hLen + 3] = MQTT_HEADER "0,";  // +0,
     str[hLen + 2] = pirFlag + '0';
     pirFlag = 0;
     mqtt.publish(data.remote, str);
@@ -367,25 +423,39 @@ void animation() {
   static Timer tmr(30);
   static bool breath;   // здесь отвечает за погашение яркости для дыхания
   static uint8_t count; // счётчик-пропуск периодов
+  static uint8_t overlay = 1;
 
   if (tmr.period()) {
     // переключаем локальную яркость для "дыхания"
     count++;
     if (!onlineTmr.elapsed()) {   // удалённая лампа онлайн
       if (!pirTmr.elapsed()) {    // сработал ИК на удалённой
-        if (count % 10 == 0) breath = !breath;
+        if (count % 10 == 0) {
+          breath = !breath;
+        }
       } else {
-        if (count % 30 == 0) breath = !breath;
+        if (count % 30 == 0) {
+          breath = !breath;
+        }
       }
     } else {
       breath = 1;
     }    
     uint8_t curBr = data.power ? (breath ? 255 : 210) : 0;
-
+    if (isNight()) {
+      curBr = map(curBr, 0, 255, 0, 60);
+    }
+    
     // здесь делаем плавные переходы между цветами
     CRGB ncol = CHSV(data.color, 255, curBr);
     CRGB ccol = leds[0];
-    if (ccol != ncol) ccol = blend(ccol, ncol, 17);
+
+    if (ccol != ncol) {
+      overlay += 5;
+      ccol = blend(ccol, ncol, overlay);
+    } else {
+      overlay = 5;
+    }
 
     // выводим на ленту
     fill_solid(leds, LED_AMOUNT, ccol);
@@ -453,7 +523,7 @@ int getFromIndex(char* str, int idx, char div) {
 
 void setup() {
   delay(1000);
-  Serial.begin(9600);         // запускаем сериал для отладки
+  Serial.begin(115200);         // запускаем сериал для отладки
   Serial.println("Starting...");
   portal.attachBuild(webfaceBuilder);  // подключаем интерфейс
 
@@ -465,7 +535,7 @@ void setup() {
   IPAddress ip = IPAddress(data.ip[0], data.ip[1], data.ip[2], data.ip[3]);
 
   // запускаем ленту
-  FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, LED_AMOUNT).setCorrection(TypicalLEDStrip);
+  FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, LED_AMOUNT).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(50);
   FastLED.show();
 
@@ -513,6 +583,12 @@ void setup() {
     memory.update();
   }
 
+  // настраиваем и запускаем NTP-клиент
+  ntpTime.setPoolServerName(data.ntpUrl);
+  ntpTime.setTimeOffset(data.ntpTimezone * 3600);
+  ntpTime.setUpdateInterval(12 * 60 * 60 * 1000); // обновлять время раз в 12 часов
+  ntpTime.begin();
+
   // стартуем вебсокет
   mqtt.setServer(data.host, data.port);
   mqtt.setCallback(callback);
@@ -525,15 +601,39 @@ void setup() {
 }
 
 void loop() {
+  //uint32_t loopStart = millis();
   if (USE_PIR && digitalRead(PIR_PIN)) {
     pirFlag = 1;  // опрос ИК датчика
   }
-  
+
+  static uint32_t logTimer = 0;
+  if (logTimer < millis()) {
+    logTimer = millis() + 1000;
+    DEBUGLN(String("Current time: ") + String(ntpTime.getFormattedTime()));
+  //   DEBUGLN(String("Current timezone: ") + String(data.ntpTimezone));
+  //   DEBUGLN(String("Current night mode state: ") + String(data.nightModeEn));
+  //   DEBUGLN(String("Current night start: ") + String(data.nightStart));
+  //   DEBUGLN(String("Current night end: ") + String(data.nightEnd));
+  //   DEBUGLN(String("Current NTP URL: ") + String(data.ntpUrl));
+  //   DEBUGLN(String("Current PIR State: ") + String(pirFlag));
+  //   DEBUGLN(String("Current isNight(): ") + String(isNight()));
+  //   DEBUGLN(String("Current ntpTime.getHours(): ") + String(ntpTime.getHours()));    
+
+  }
+
+  ntpTime.update();
   heartbeat();    // отправляем пакет что мы онлайн
   memory.tick();  // проверяем обновление настроек
   animation();    // эффект ленты
   buttonTick();   // действия кнопки
   mqttTick();     // проверяем входящие
   portal.tick();  // пинаем портал
-  checkPortal();  // проверяем действия
+  if (checkPortal()) { // проверяем действия
+    DEBUGLN(String("Portal reports about changes!"));
+    ntpTime.setPoolServerName(data.ntpUrl);
+    ntpTime.setTimeOffset(data.ntpTimezone * 3600);
+  }  
+
+  // system_deep_sleep(5 * 1000 * 1000);
+  //DEBUGLN(String("Loop-cycle execution took: ") + String(millis() - loopStart) + String(" msec."));
 }
