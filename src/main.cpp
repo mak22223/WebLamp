@@ -62,7 +62,8 @@ struct LampData {
   char ssid[32] = "";
   char pass[32] = "";
   char local[20] = "AG_lamp_1";
-  char remote[20] = "AG_lamp_2";
+  char remote0[20] = "AG_lamp_2";
+  char remote1[20] = "AG_lamp_3";
   char host[32] = "broker.mqttdashboard.com";
   int nightEnd = 8, nightStart = 20;
   char ntpUrl[32] = "ntp1.stratum2.ru";
@@ -127,6 +128,7 @@ void webfaceBuilder() {
   add.BLOCK_BEGIN();
   add.LABEL("Local:");
   add.LED_GREEN("ledL", mqtt.connected());
+  /// TODO: добавить индикаторы для второго remote
   add.LABEL("Remote:");
   add.LED_GREEN("ledR", !onlineTmr.elapsed());
   add.BREAK();
@@ -156,7 +158,9 @@ void webfaceBuilder() {
   add.BLOCK_BEGIN();
   add.TEXT("local", "Local Name", data.local);
   add.BREAK();
-  add.TEXT("remote", "Remote Name", data.remote);
+  add.TEXT("remote0", "First Remote Name", data.remote0);
+  add.BREAK();
+  add.TEXT("remote1", "Second Remote Name", data.remote1);
   add.BREAK();
   add.TEXT("host", "Host", data.host);
   add.BREAK();
@@ -266,7 +270,8 @@ bool checkPortal() {
       portal.copyStr("ssid", data.ssid);
       portal.copyStr("pass", data.pass);
       portal.copyStr("local", data.local);
-      portal.copyStr("remote", data.remote);
+      portal.copyStr("remote0", data.remote0);
+      portal.copyStr("remote1", data.remote1);
       portal.copyStr("host", data.host);
       data.port = portal.getInt("port");
 
@@ -313,7 +318,8 @@ void mqttTick() {
     if (!startFlag) {
       startFlag = 1;
       char str[] = MQTT_HEADER "2";  // +2
-      mqtt.publish(data.remote, str);
+      mqtt.publish(data.remote0, str); // запрос цвета у обеих ламп
+      mqtt.publish(data.remote1, str); 
     }
   }
   mqtt.loop();
@@ -374,7 +380,8 @@ void sendPacket() {
   s += winkFlag;
   winkFlag = 0;
   // отправляем
-  mqtt.publish(data.remote, s.c_str());
+  mqtt.publish(data.remote0, s.c_str());
+  mqtt.publish(data.remote1, s.c_str());
 }
 
 void heartbeat() {
@@ -383,7 +390,8 @@ void heartbeat() {
     char str[hLen + 3] = MQTT_HEADER "0,";  // +0,
     str[hLen + 2] = pirFlag + '0';
     pirFlag = 0;
-    mqtt.publish(data.remote, str);
+    mqtt.publish(data.remote0, str);
+    mqtt.publish(data.remote1, str);
   }
 }
 
@@ -634,6 +642,5 @@ void loop() {
     ntpTime.setTimeOffset(data.ntpTimezone * 3600);
   }  
 
-  // system_deep_sleep(5 * 1000 * 1000);
   //DEBUGLN(String("Loop-cycle execution took: ") + String(millis() - loopStart) + String(" msec."));
 }
