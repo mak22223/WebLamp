@@ -216,6 +216,7 @@ void buttonTick() {
 
   // импульсное удержание
   static int8_t dir = 10;
+  if (data.power) {
   if (btn.step()) {
     data.bright = constrain(data.bright + dir, 0, 255);
     /*if (data.bright == 255) {
@@ -231,6 +232,7 @@ void buttonTick() {
     dir = -dir;
     memory.update();
   }
+}
 }
 
 bool checkPortal() {
