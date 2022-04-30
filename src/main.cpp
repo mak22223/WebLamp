@@ -50,12 +50,17 @@
 #include "Timer.h"
 
 // ============= ДАННЫЕ =============
-#if 1
+
+#define DEBUG
+
+#ifdef DEBUG
 #define DEBUG(x) Serial.print(x)
 #define DEBUGLN(x) Serial.println(x)
+#define DEBUG_START Serial.begin(115200);
 #else
 #define DEBUG(x)
 #define DEBUGLN(x)
+#define DEBUG_START
 #endif
 
 struct LampData {
@@ -111,7 +116,6 @@ void brightLoop(int from, int to, int step);
 void loadAnimation(CRGB color);
 int getFromIndex(char* str, int idx, char div = ',');
 
-// поместить в объект отвечающий за время
 inline bool isNight() {
   return (ntpTime.getHours() < data.nightEnd || ntpTime.getHours() >= data.nightStart) && data.nightModeEn ? true : false;
 }
@@ -327,19 +331,13 @@ void connectMQTT() {
   // задаём случайный ID
   String id("WebLamp-");
   id += String(random(0xffffff), HEX) + String(random(0xffffff), HEX);
-  //DEBUGLN(id);
+  
   // подписываемся на своё имя
-
-  // DEBUGLN(String("Connecting to \"") + data.host + "\" with id \"" + id + "\".");
   if (mqtt.connect(id.c_str())) {
-    // DEBUGLN("Successfully connected to MQTT server.");
-    // DEBUGLN(String("Subscribing to:") + data.local);
     mqtt.subscribe(data.local);
-  } else {
-    // DEBUGLN("Couldn't connect to MQTT server.");
   }
   /// TODO: убрать
-  delay(1000);
+  yield();
 }
 
 // тут нам прилетел пакет от удалённой лампы
@@ -501,7 +499,7 @@ void animation() {
 // локальный запуск портала. При любом исходе заканчивается ресетом платы
 void localPortal(IPAddress ip) {
   // создаём точку с именем WLamp и предыдущим успешным IP
-  Serial.println(F("Create AP"));
+  DEBUGLN(F("Create AP"));
   WiFi.mode(WIFI_AP);
   String s(F("WLamp "));
   s += ip.toString();
@@ -557,8 +555,8 @@ int getFromIndex(char* str, int idx, char div) {
 
 void setup() {
   delay(1000);
-  Serial.begin(115200);         // запускаем сериал для отладки
-  Serial.println("Starting...");
+  DEBUG_START  // запускаем сериал для отладки  
+  DEBUGLN("Starting...");
   portal.attachBuild(webfaceBuilder);  // подключаем интерфейс
 
   EEPROM.begin(sizeof(data) + 1); // +1 на ключ
@@ -587,7 +585,7 @@ void setup() {
   }
 
   // юзер не кликнул, пытаемся подключиться к точке
-  Serial.println("Connecting...");
+  DEBUGLN("Connecting...");
   WiFi.mode(WIFI_STA);
   WiFi.begin(data.ssid, data.pass);
   
@@ -607,8 +605,8 @@ void setup() {
   FastLED.clear();
   FastLED.show();
 
-  Serial.print(F("Connected! IP: "));
-  Serial.println(WiFi.localIP());
+  DEBUG(F("Connected! IP: "));
+  DEBUGLN(WiFi.localIP());
 
   // переписываем удачный IP себе в память
   if (ip != WiFi.localIP()) {
