@@ -328,11 +328,17 @@ void mqttTick() {
 void connectMQTT() {
   // задаём случайный ID
   String id("WebLamp-");
-  id += String(random(0xffffff), HEX);
+  id += String(random(0xffffff), HEX) + String(random(0xffffff), HEX);
   //DEBUGLN(id);
   // подписываемся на своё имя
+
+  // DEBUGLN(String("Connecting to \"") + data.host + "\" with id \"" + id + "\".");
   if (mqtt.connect(id.c_str())) {
+    // DEBUGLN("Successfully connected to MQTT server.");
+    // DEBUGLN(String("Subscribing to:") + data.local);
     mqtt.subscribe(data.local);
+  } else {
+    // DEBUGLN("Couldn't connect to MQTT server.");
   }
   /// TODO: убрать
   delay(1000);
@@ -350,7 +356,9 @@ void callback(char* topic, byte* payload, uint16_t len) {
 
   switch (getFromIndex(str, 0)) {
     case 0:   // heartbeat
-      if (!IGNORE_PIR && getFromIndex(str, 1)) pirTmr.restart();
+      if (!IGNORE_PIR && getFromIndex(str, 1)) {
+        pirTmr.restart();
+      }
       break;
 
     case 1:   // управление
@@ -609,7 +617,8 @@ void setup() {
 }
 
 void loop() {
-  //uint32_t loopStart = millis();
+  // uint32_t loopStart = millis();
+
   if (USE_PIR && digitalRead(PIR_PIN)) {
     pirFlag = 1;  // опрос ИК датчика
   }
@@ -617,16 +626,22 @@ void loop() {
   static uint32_t logTimer = 0;
   if (logTimer < millis()) {
     logTimer = millis() + 1000;
-    DEBUGLN(String("Current time: ") + String(ntpTime.getFormattedTime()));
-  //   DEBUGLN(String("Current timezone: ") + String(data.ntpTimezone));
-  //   DEBUGLN(String("Current night mode state: ") + String(data.nightModeEn));
-  //   DEBUGLN(String("Current night start: ") + String(data.nightStart));
-  //   DEBUGLN(String("Current night end: ") + String(data.nightEnd));
-  //   DEBUGLN(String("Current NTP URL: ") + String(data.ntpUrl));
-  //   DEBUGLN(String("Current PIR State: ") + String(pirFlag));
-  //   DEBUGLN(String("Current isNight(): ") + String(isNight()));
-  //   DEBUGLN(String("Current ntpTime.getHours(): ") + String(ntpTime.getHours()));    
-
+    // DEBUGLN(String("Current time: ") + String(ntpTime.getFormattedTime()));
+    // DEBUGLN(String("Current timezone: ") + String(data.ntpTimezone));
+    // DEBUGLN(String("Current night mode state: ") + String(data.nightModeEn));
+    // DEBUGLN(String("Current night start: ") + String(data.nightStart));
+    // DEBUGLN(String("Current night end: ") + String(data.nightEnd));
+    // DEBUGLN(String("Current NTP URL: ") + String(data.ntpUrl));
+    // DEBUGLN(String("Current PIR State: ") + String(pirFlag));
+    // DEBUGLN(String("Current isNight(): ") + String(isNight()));
+    // DEBUGLN(String("Current ntpTime.getHours(): ") + String(ntpTime.getHours()));    
+    // DEBUGLN(String("Current ssid: ") + String(data.ssid));    
+    // DEBUGLN(String("Current password: ") + String(data.pass));    
+    // DEBUGLN(String("Saved ssid: ") + WiFi.SSID()); 
+    // DEBUGLN(String("Current color: ") + data.color);
+    // DEBUGLN(String("My comrades are: "));
+    // DEBUGLN(String(data.remote0));
+    // DEBUGLN(String(data.remote1));
   }
 
   ntpTime.update();
@@ -642,5 +657,5 @@ void loop() {
     ntpTime.setTimeOffset(data.ntpTimezone * 3600);
   }  
 
-  //DEBUGLN(String("Loop-cycle execution took: ") + String(millis() - loopStart) + String(" msec."));
+  // DEBUGLN(String("Loop-cycle execution took: ") + String(millis() - loopStart) + String(" msec."));
 }
