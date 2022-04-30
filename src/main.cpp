@@ -94,11 +94,15 @@ bool pirFlag = false;
 bool winkFlag = false;
 uint8_t winkTimes = 0;
 bool startFlag = false;
+bool offlineMode = false;
+bool isSleeping = false;
+
 const uint8_t hLen = strlen(MQTT_HEADER);
 
 Timer onlineTmr(18000, false);  // 18 секунд таймаут онлайна
 Timer pirTmr(60000, false);     // 1 минута таймаут пира
 Timer hbTmr(8000);              // 8 секунд период отправки пакета
+Timer idleTmr(30 * 60 * 1000, false);
 
 void webfaceBuilder();
 void buttonTick();
@@ -106,7 +110,7 @@ bool checkPortal();
 void mqttTick();
 void connectMQTT();
 bool checkPortal();
-void localPortal(IPAddress ip);
+uint8_t localPortal(IPAddress ip);
 void callback(char* topic, byte* payload, uint16_t len);
 void sendPacket();
 void heartbeat();
@@ -114,6 +118,7 @@ void wink();
 void brightLoop(int from, int to, int step);
 void loadAnimation(CRGB color);
 int getFromIndex(char* str, int idx, char div = ',');
+void animation(const bool &isSleeping = false, const bool &isNight = false);
 
 inline bool isNight() {
   return (ntpTime.getHours() < data.nightEnd || ntpTime.getHours() >= data.nightStart) && data.nightModeEn ? true : false;
@@ -197,39 +202,54 @@ UTC+5,UTC+6,UTC+7,UTC+8,UTC+9,UTC+10,UTC+11,UTC+12", data.ntpTimezone + 12);
   BUILD_END();
 }
 
-void buttonTick() {
+void buttonTick(bool isSleeping) {
   btn.tick();
-
-  // клики
-  switch (btn.hasClicks()) {
-    case 1:   // вкл выкл
-      data.power = !data.power;
-      sendPacket();
-      memory.update();
-      break;
-    case 2:   // сменить цвет
-      data.color += 32;
-      sendPacket();
-      memory.update();
-      break;
-    case 3:   // подмигнуть
-      winkFlag = 1;
-      sendPacket();
-      break;
+  
+  // проверка на выход из сна
+  static bool sleepFlag = false;
+  if (isSleeping && !sleepFlag) {
+    sleepFlag = true;
   }
-
-  // импульсное удержание
-  static int8_t dir = 10;
-  if (data.power) {
-    if (btn.step()) {
-      data.bright = constrain(data.bright + dir, 0, 255);
-      if (data.bright == 255) {
-        winkTimes = 1;
-      }
+  if (!isSleeping && sleepFlag) {
+    sleepFlag = btn.hasClicks() || btn.releaseStep() ? false : true;
+  }
+  
+  if (!sleepFlag) {
+    // клики
+    uint8_t clickCount = btn.hasClicks();
+    switch (clickCount) {
+      case 1:   // вкл выкл
+        data.power = !data.power;
+        memory.update();
+        break;
+      case 2:   // сменить цвет
+        data.color += 32;
+        memory.update();
+        break;
+      case 3:   // подмигнуть
+        winkFlag = 1;
+        break;
+      default:
+        break;
     }
-    if (btn.releaseStep()) {
-      dir = -dir;
-      memory.update();
+
+    if (offlineMode == false && clickCount > 0) {
+      sendPacket();
+    }
+
+    // импульсное удержание
+    static int8_t dir = 10;
+    if (data.power) {
+      if (btn.step()) {
+        data.bright = constrain(data.bright + dir, 0, 255);
+        if (data.bright == 255) {
+          winkTimes = 1;
+        }
+      }
+      if (btn.releaseStep()) {
+        dir = -dir;
+        memory.update();
+      }
     }
   }
 }
@@ -402,7 +422,7 @@ void heartbeat() {
 ///////////////////////////////////////////////
 
 // выводим эффект на ленту
-void animation() {
+void animation(const bool &isSleeping, const bool &isNight) {
   static Timer tmr(30);
   static bool breath;   // здесь отвечает за погашение яркости для дыхания
   static uint8_t breathDivider = 30;
@@ -430,8 +450,8 @@ void animation() {
     } else {
       breath = true;
     }
-    uint8_t curBr = data.power ? (breath ? 255 : 230) : 0;
-    if (isNight()) {
+    uint8_t curBr = (data.power && !isSleeping) ? (breath ? 255 : 220) : 0;
+    if (isNight) {
       curBr = map(curBr, 0, 255, 0, 60);
     }
     
@@ -449,17 +469,18 @@ void animation() {
   }
   
   // анимация подмигивания
-  static int16_t brightness = data.bright;
-  static uint8_t step = 10;
-  static bool dir = false;
-  static Timer winkTimer(4);
+  static uint8_t correctedBrightness = data.bright;
+  
   if (winkTimes != 0) {
-    if (winkTimer.period()) {
+    static int16_t brightness = data.bright;
+    static uint8_t step = 10;
+    static bool dir = false;
+    static Timer winkTimer(4);
 
+    if (winkTimer.period()) {
       brightness = dir ? brightness + step : brightness - step;
       if (brightness > 255) {
         --winkTimes;
-        /// TODO: при неполной яркости скорее всего будет резкий переход в конце подмигивания
         brightness = 255;
         dir = !dir;
       } else {
@@ -468,34 +489,49 @@ void animation() {
           dir = !dir;
         }
       }
+      correctedBrightness = map((uint8_t)brightness, 0, 255, 0, data.bright);
     }
   } else {
-    brightness = data.bright;
+    correctedBrightness = data.bright;
   }
 
   // выводим на ленту
   fill_solid(leds, LED_AMOUNT, ccol);
-  FastLED.setBrightness(brightness);
+  FastLED.setBrightness(correctedBrightness);
   FastLED.show();
 }
 
-// локальный запуск портала. При любом исходе заканчивается ресетом платы
-void localPortal(IPAddress ip) {
+// Запуск портала с собственной точкой доступа.
+// Возвращает: 
+// 1 - пользователь нажал сохранить в интерфейсе;
+// 2 - была нажата кнопка (оффлайн режим).
+uint8_t localPortal(IPAddress ip) {
   // создаём точку с именем WLamp и предыдущим успешным IP
   DEBUGLN(F("Create AP"));
+  WiFiMode previousWiFimode = WiFi.getMode();
   WiFi.mode(WIFI_AP);
-  String s(F("WLamp "));
-  s += ip.toString();
+  String s(F("WLamp-"));
+  s += WiFi.macAddress().substring(9, 11) + WiFi.macAddress().substring(12, 14) + WiFi.macAddress().substring(15, 17) + " " + ip.toString();
+  DEBUGLN(String("SSID: ") + s);
   WiFi.softAP(s);
 
   portal.start(WIFI_AP);    // запускаем портал
-  while (portal.tick()) {   // портал работает
+  uint8_t exitCode = 0;
+  do {
+    portal.tick();
     loadAnimation(CRGB::Blue);      // мигаем синим
     btn.tick();
-    // если нажали сохранить настройки или кликнули по кнопке
-    // перезагружаем ESP
-    if (checkPortal() || btn.click()) ESP.reset();
-  }
+    if (checkPortal()) {
+      exitCode = 1;
+    }
+    if (btn.click()) {
+      exitCode = 2;
+    }
+  } while (exitCode == 0);
+  portal.stop();
+  WiFi.softAPdisconnect();
+  WiFi.mode(previousWiFimode);
+  return exitCode;
 }
 
 
@@ -534,6 +570,20 @@ int getFromIndex(char* str, int idx, char div) {
   return sign ? -val : val;
 }
 
+// Проверка на наличие условий перехода в сон
+bool sleepModeTick() {
+  if ((USE_PIR && digitalRead(PIR_PIN)) || (digitalRead(BTN_PIN) == BTN_LEVEL)) {
+    idleTmr.restart();
+    return false;
+  } else {
+    if (idleTmr.elapsed()) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+}
+
 ///////////////////////////////////////////////
 
 void setup() {
@@ -560,69 +610,111 @@ void setup() {
   // таймер на 2 секунды перед подключением,
   // чтобы юзер успел кликнуть если надо
   Timer tmr(2000);
-  while (!tmr.period()) {
-    loadAnimation(CRGB::Green);    // анимация подключения
-    btn.tick();
-    if (btn.click()) localPortal(ip); // клик - запускаем портал
-    // дальше код не пойдёт, уйдем в перезагрузку
-  }
-
-  // юзер не кликнул, пытаемся подключиться к точке
-  DEBUGLN("Connecting...");
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(data.ssid, data.pass);
-  
-  tmr.setPeriod(15000);
   tmr.restart();
 
-  while (WiFi.status() != WL_CONNECTED) {
-    loadAnimation(CRGB::Green);      // анимация подключения
+  while (!tmr.elapsed()) {
+    loadAnimation(CRGB::Yellow);    // анимация подключения
     btn.tick();
-    // если клик по кнопке или вышел таймаут
-    if (btn.click() || tmr.period()) {
-      WiFi.disconnect();  // отключаемся
-      localPortal(ip);    // открываем портал
-      // дальше код не пойдёт, уйдем в перезагрузку
+    if (btn.click()) { // клик - запускаем портал
+      switch (localPortal(ip))
+      {
+      case 1:
+        offlineMode = false;
+        break;
+
+      case 2:
+        offlineMode = true;
+        WiFi.mode(WIFI_SHUTDOWN);
+        break;
+      
+      default:
+        ESP.reset();
+        break;
+      }
     }
   }
+
+  // пытаемся подключиться к точке если не выбран оффлайн режим
+  if (offlineMode == false) {
+    while (WiFi.status() != WL_CONNECTED && offlineMode == false) {
+      DEBUGLN("Trying to connect to WiFi network...");
+      WiFi.mode(WIFI_STA);
+      WiFi.begin(data.ssid, data.pass);
+      
+      tmr.setPeriod(15000);
+      tmr.restart();
+
+      bool settingsSaved = false;
+    
+      while (WiFi.status() != WL_CONNECTED && offlineMode == false && settingsSaved == false) {
+        yield();
+        loadAnimation(CRGB::Green);      // анимация подключения
+        btn.tick();
+        // если клик по кнопке или вышел таймаут
+        if (btn.click() || tmr.period()) {
+          WiFi.disconnect();  // отключаемся
+          switch (localPortal(ip))
+          {
+          case 1:
+            settingsSaved = true;
+            offlineMode = false;
+            break;
+
+          case 2:
+            offlineMode = true;
+            settingsSaved = false;
+            WiFi.mode(WIFI_SHUTDOWN);
+            break;
+          
+          default:
+            ESP.reset();
+            break;
+          }
+        }
+      }
+    }
+  }
+
   FastLED.clear();
   FastLED.show();
 
-  DEBUG(F("Connected! IP: "));
-  DEBUGLN(WiFi.localIP());
+  if (offlineMode == false) {
+    DEBUG(F("Connected! IP: "));
+    DEBUGLN(WiFi.localIP());
 
-  // переписываем удачный IP себе в память
-  if (ip != WiFi.localIP()) {
-    ip = WiFi.localIP();
+    // переписываем удачный IP себе в память
+    if (ip != WiFi.localIP()) {
+      ip = WiFi.localIP();
       for (int i = 0; i < 4; i++) {
         data.ip[i] = ip[i];
       }
-    memory.update();
+      memory.update();
+    }
+
+    // настраиваем и запускаем NTP-клиент
+    ntpTime.setPoolServerName(data.ntpUrl);
+    ntpTime.setTimeOffset(data.ntpTimezone * 3600);
+    ntpTime.setUpdateInterval(12 * 60 * 60 * 1000); // обновлять время раз в 12 часов
+    ntpTime.begin();
+
+    // стартуем вебсокет
+    mqtt.setServer(data.host, data.port);
+    mqtt.setCallback(callback);
+    randomSeed(micros());
+
+    // стартуем портал
+    portal.start();
   }
 
-  // настраиваем и запускаем NTP-клиент
-  ntpTime.setPoolServerName(data.ntpUrl);
-  ntpTime.setTimeOffset(data.ntpTimezone * 3600);
-  ntpTime.setUpdateInterval(12 * 60 * 60 * 1000); // обновлять время раз в 12 часов
-  ntpTime.begin();
-
-  // стартуем вебсокет
-  mqtt.setServer(data.host, data.port);
-  mqtt.setCallback(callback);
-  randomSeed(micros());
-
-  // стартуем портал
-  portal.start();
-
   FastLED.setBrightness(data.bright);
+  if (USE_PIR) {
+    idleTmr.restart();
+  }
+  
 }
 
 void loop() {
   // uint32_t loopStart = millis();
-
-  if (USE_PIR && digitalRead(PIR_PIN)) {
-    pirFlag = 1;  // опрос ИК датчика
-  }
 
   static uint32_t logTimer = 0;
   if (logTimer < millis()) {
@@ -645,18 +737,34 @@ void loop() {
     // DEBUGLN(String(data.remote1));
   }
 
-  ntpTime.update();
-  heartbeat();    // отправляем пакет что мы онлайн
+  if (offlineMode == false) {
+    ntpTime.update();
+    heartbeat();    // отправляем пакет что мы онлайн
+    mqttTick();     // проверяем входящие
+    portal.tick();  // пинаем портал
+
+    if (checkPortal()) { // проверяем действия
+      DEBUGLN(String("Portal reports about changes!"));
+      ntpTime.setPoolServerName(data.ntpUrl);
+      ntpTime.setTimeOffset(data.ntpTimezone * 3600);
+
+      mqtt.disconnect();
+      mqtt.setServer(data.host, data.port);
+      connectMQTT();
+    } 
+  }
+
+  if (USE_PIR && digitalRead(PIR_PIN)) {
+    pirFlag = 1;  // опрос ИК датчика
+  }
+
+  bool isSleeping = sleepModeTick();
+
+  buttonTick(isSleeping);   // действия кнопки
   memory.tick();  // проверяем обновление настроек
-  animation();    // эффект ленты
-  buttonTick();   // действия кнопки
-  mqttTick();     // проверяем входящие
-  portal.tick();  // пинаем портал
-  if (checkPortal()) { // проверяем действия
-    DEBUGLN(String("Portal reports about changes!"));
-    ntpTime.setPoolServerName(data.ntpUrl);
-    ntpTime.setTimeOffset(data.ntpTimezone * 3600);
-  }  
+
+  animation(isSleeping, offlineMode ? false : isNight());    // эффект ленты
+  
   
   // DEBUGLN(String("Loop-cycle execution took: ") + String(millis() - loopStart) + String(" msec."));
 }
