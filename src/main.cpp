@@ -397,8 +397,8 @@ void sendPacket() {
 void heartbeat() {
   if (hbTmr.period()) {
     // GWL:0,pir
-    char str[hLen + 3] = MQTT_HEADER "0,";  // +0,
-    str[hLen + 2] = pirFlag + '0';
+    char str[hLen + 4] = MQTT_HEADER "0,\0";  // ставим один нуль-символ и еще один компилятор сам поставит
+    str[hLen + 2] = '0' + pirFlag;
     pirFlag = 0;
     mqtt.publish(data.remote0, str);
     mqtt.publish(data.remote1, str);
