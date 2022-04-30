@@ -16,7 +16,6 @@
 #define USE_PIR 1     // 1 - использовать PIR (ИК-датчик) на этой лампе
 #define IGNORE_PIR 0  // 1 - игнорировать сигнал PIR (ИК датчика) с удалённой лампы
 
-
 /*
   Запуск:
   Клик или >15 секунд при анимации подключения: запустить точку доступа
@@ -51,9 +50,9 @@
 
 // ============= ДАННЫЕ =============
 
-#define DEBUG
+#define DEBUG_ENABLED
 
-#ifdef DEBUG
+#ifdef DEBUG_ENABLED
 #define DEBUG(x) Serial.print(x)
 #define DEBUGLN(x) Serial.println(x)
 #define DEBUG_START Serial.begin(115200);
@@ -66,9 +65,9 @@
 struct LampData {
   char ssid[32] = "";
   char pass[32] = "";
-  char local[20] = "AG_lamp_1";
-  char remote0[20] = "AG_lamp_2";
-  char remote1[20] = "AG_lamp_3";
+  char local[20] = "WebLamp_1";
+  char remote0[20] = "WebLamp_2";
+  char remote1[20] = "WebLamp_3";
   char host[32] = "broker.mqttdashboard.com";
   int nightEnd = 8, nightStart = 20;
   char ntpUrl[32] = "ntp1.stratum2.ru";
@@ -91,10 +90,10 @@ WiFiClient espClient;
 PubSubClient mqtt(espClient);
 GyverPortal portal;
 EEManager memory(data);
-bool pirFlag = 0;
-bool winkFlag = 0;
+bool pirFlag = false;
+bool winkFlag = false;
 uint8_t winkTimes = 0;
-bool startFlag = 0;
+bool startFlag = false;
 const uint8_t hLen = strlen(MQTT_HEADER);
 
 Timer onlineTmr(18000, false);  // 18 секунд таймаут онлайна
@@ -235,6 +234,8 @@ void buttonTick() {
   }
 }
 
+// Проверка изменений пришедших с портала.
+// Возвращает true, если были какие-то изменения.
 bool checkPortal() {
   // клики
   if (portal.click()) {
@@ -293,14 +294,11 @@ bool checkPortal() {
       data.ntpTimezone = atoi(timezone);
 
       memory.updateNow();
-      mqtt.disconnect();
-      mqtt.setServer(data.host, data.port);
-      connectMQTT();
       // true если submit, для выхода из цикла в AP
-      return 1;
+      return true;
     }
   }
-  return 0;
+  return false;
 }
 
 ////////////////////////////////////////////////////
@@ -409,7 +407,6 @@ void animation() {
   static bool breath;   // здесь отвечает за погашение яркости для дыхания
   static uint8_t breathDivider = 30;
   static uint8_t count; // счётчик-пропуск периодов
-  static Timer overlayTimer(60);
   static uint8_t overlayCnt = 0;
   static uint8_t overlayValues[] = { 7, 25, 53, 89, 128, 167, 203, 231, 249, 255 };
   static CRGB prevNCol(0, 0, 0);
@@ -597,7 +594,9 @@ void setup() {
   // переписываем удачный IP себе в память
   if (ip != WiFi.localIP()) {
     ip = WiFi.localIP();
-    for (int i = 0; i < 4; i++) data.ip[i] = ip[i];
+      for (int i = 0; i < 4; i++) {
+        data.ip[i] = ip[i];
+      }
     memory.update();
   }
 
