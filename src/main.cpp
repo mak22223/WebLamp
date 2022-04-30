@@ -88,6 +88,7 @@ GyverPortal portal;
 EEManager memory(data);
 bool pirFlag = 0;
 bool winkFlag = 0;
+uint8_t winkTimes = 0;
 bool startFlag = 0;
 const uint8_t hLen = strlen(MQTT_HEADER);
 
@@ -217,22 +218,17 @@ void buttonTick() {
   // импульсное удержание
   static int8_t dir = 10;
   if (data.power) {
-  if (btn.step()) {
-    data.bright = constrain(data.bright + dir, 0, 255);
-    /*if (data.bright == 255) {
-      FastLED.setBrightness(0);
-      FastLED.show();
-      delay(150);
-      FastLED.setBrightness(255);
-      FastLED.show();
-      delay(150);
-    }*/
+    if (btn.step()) {
+      data.bright = constrain(data.bright + dir, 0, 255);
+      if (data.bright == 255) {
+        winkTimes = 1;
+      }
+    }
+    if (btn.releaseStep()) {
+      dir = -dir;
+      memory.update();
+    }
   }
-  if (btn.releaseStep()) {
-    dir = -dir;
-    memory.update();
-  }
-}
 }
 
 bool checkPortal() {
@@ -366,7 +362,9 @@ void callback(char* topic, byte* payload, uint16_t len) {
     case 1:   // управление
       data.power = getFromIndex(str, 1);
       data.color = getFromIndex(str, 2);
-      if (getFromIndex(str, 3)) wink();
+      if (getFromIndex(str, 3)) {
+        winkTimes = 3;
+      } 
       break;
 
     case 2:   // запрос
@@ -407,79 +405,97 @@ void heartbeat() {
 
 ///////////////////////////////////////////////
 
-// подмигнуть
-void wink() {
-  if (data.power) {
-    brightLoop(data.bright, 0, 20);
-    brightLoop(0, 255, 20);
-    brightLoop(255, 0, 20);
-    brightLoop(0, 255, 20);
-    brightLoop(255, 0, 20);
-    brightLoop(0, data.bright, 20);
-  }
-}
-
-// костыльно, но куда деваться
-void brightLoop(int from, int to, int step) {
-  int val = from;
-  for (;;) {
-    FastLED.setBrightness(val);
-    FastLED.show();
-    delay(10);
-    if (from > to) {
-      val -= step;
-      if (val < to) return;
-    } else {
-      val += step;
-      if (val > to) return;
-    }
-  }
-}
-
 // выводим эффект на ленту
 void animation() {
   static Timer tmr(30);
   static bool breath;   // здесь отвечает за погашение яркости для дыхания
+  static uint8_t breathDivider = 30;
   static uint8_t count; // счётчик-пропуск периодов
-  static uint8_t overlay = 1;
+  static Timer overlayTimer(60);
+  static uint8_t overlayCnt = 0;
+  static uint8_t overlayValues[] = { 7, 25, 53, 89, 128, 167, 203, 231, 249, 255 };
+  static CRGB prevNCol(0, 0, 0);
 
   if (tmr.period()) {
     // переключаем локальную яркость для "дыхания"
-    count++;
-    if (!onlineTmr.elapsed()) {   // удалённая лампа онлайн
-      if (!pirTmr.elapsed()) {    // сработал ИК на удалённой
-        if (count % 10 == 0) {
-          breath = !breath;
+    
+    if (!onlineTmr.elapsed()) {
+        breathDivider = 30;
+        if (!pirTmr.elapsed()) {
+          breathDivider = 10;
         }
-      } else {
-        if (count % 30 == 0) {
+        ++count;
+
+        if (count % breathDivider == 0) {
           breath = !breath;
+          count = 0;
+        }
+    } else {
+      breath = true;
+    }  
+  }
+  uint8_t curBr = data.power ? (breath ? 255 : 230) : 0;
+  if (isNight()) {
+    curBr = map(curBr, 0, 255, 0, 60);
+  }
+  
+  // здесь делаем плавные переходы между цветами
+  CRGB ncol = CHSV(data.color, 255, curBr);
+  CRGB ccol = leds[0];
+
+  static Timer fadeTimer(5);
+
+  // отладка скорости переходов
+  /*static bool flag = true;
+  static uint32_t timer1 = millis();
+  if (ccol == ncol) {
+    if (flag) {
+      DEBUGLN(String("Fade cycle took: ") + (millis() - timer1));
+      flag = false;
+    }
+    timer1 = millis();
+  } else {
+    flag = true;
+  }*/
+
+  if (fadeTimer.period() && (ccol != ncol)) {
+    if (prevNCol != ncol) {
+      overlayCnt = 0;
+      prevNCol = ncol;
+    }
+    ccol = blend(ccol, ncol, overlayValues[overlayCnt >> 2]);
+    ++overlayCnt;
+  }
+
+  // анимация подмигивания
+  static int16_t brightness = data.bright;
+  static uint8_t step = 10;
+  static bool dir = false;
+  static Timer winkTimer(4);
+  if (winkTimes != 0) {
+    if (winkTimer.period()) {
+
+      brightness = dir ? brightness + step : brightness - step;
+      if (brightness > 255) {
+        --winkTimes;
+        /// TODO: при неполной яркости скорее всего будет резкий переход в конце подмигивания
+        brightness = 255;
+        dir = !dir;
+      } else {
+        if (brightness < 0) {
+          brightness = 0;
+          dir = !dir;
         }
       }
-    } else {
-      breath = 1;
-    }    
-    uint8_t curBr = data.power ? (breath ? 255 : 210) : 0;
-    if (isNight()) {
-      curBr = map(curBr, 0, 255, 0, 60);
     }
-    
-    // здесь делаем плавные переходы между цветами
-    CRGB ncol = CHSV(data.color, 255, curBr);
-    CRGB ccol = leds[0];
-
-    if (ccol != ncol) {
-      overlay += 5;
-      ccol = blend(ccol, ncol, overlay);
-    } else {
-      overlay = 5;
-    }
-
-    // выводим на ленту
-    fill_solid(leds, LED_AMOUNT, ccol);
-    FastLED.setBrightness(data.bright);
-    FastLED.show();
+  } else {
+    brightness = data.bright;
   }
+
+  // выводим на ленту
+  fill_solid(leds, LED_AMOUNT, ccol);
+  FastLED.setBrightness(brightness);
+  FastLED.show();
 }
 
 // локальный запуск портала. При любом исходе заканчивается ресетом платы
@@ -658,6 +674,6 @@ void loop() {
     ntpTime.setPoolServerName(data.ntpUrl);
     ntpTime.setTimeOffset(data.ntpTimezone * 3600);
   }  
-
+  
   // DEBUGLN(String("Loop-cycle execution took: ") + String(millis() - loopStart) + String(" msec."));
 }
