@@ -10,7 +10,7 @@
 
 #define LED_PIN D3    // пин ленты
 #define BTN_PIN D7    // пин кнопки
-#define PIR_PIN D8    // пин PIR (ИК-датчика)
+#define PIR_PIN D6    // пин PIR (ИК-датчика)
 #define LED_AMOUNT 18 // кол-во светодиодов
 #define BTN_LEVEL 1   // 1 - кнопка подключает VCC, 0 - подключает GND
 #define USE_PIR 1     // 1 - использовать PIR (ИК-датчик) на этой лампе
@@ -46,6 +46,7 @@
 #include <EncButton.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include <ESP8266mDNS.h>
 #include "Timer.h"
 
 // ============= ДАННЫЕ =============
@@ -691,6 +692,10 @@ void setup() {
       memory.update();
     }
 
+    // запускаем mDNS для легкого доступа к устройству
+    MDNS.begin("WebLamp");
+    MDNS.addService("http", "tcp", 80);
+
     // настраиваем и запускаем NTP-клиент
     ntpTime.setPoolServerName(data.ntpUrl);
     ntpTime.setTimeOffset(data.ntpTimezone * 3600);
@@ -738,6 +743,7 @@ void loop() {
   }
 
   if (offlineMode == false) {
+    MDNS.update();
     ntpTime.update();
     heartbeat();    // отправляем пакет что мы онлайн
     mqttTick();     // проверяем входящие
