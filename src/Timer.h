@@ -32,6 +32,8 @@ struct Timer {
     } return 0;
   }
 
+  // Проверка таймера на истечение.
+  // True - время вышло. False - нет.
   bool check() {
     return millis() - tmr >= prd;
   }
