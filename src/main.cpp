@@ -414,6 +414,8 @@ void animation() {
   static uint8_t overlayValues[] = { 7, 25, 53, 89, 128, 167, 203, 231, 249, 255 };
   static CRGB prevNCol(0, 0, 0);
 
+  CRGB ccol = leds[0];
+
   if (tmr.period()) {
     // переключаем локальную яркость для "дыхания"
     
@@ -430,41 +432,25 @@ void animation() {
         }
     } else {
       breath = true;
-    }  
-  }
-  uint8_t curBr = data.power ? (breath ? 255 : 230) : 0;
-  if (isNight()) {
-    curBr = map(curBr, 0, 255, 0, 60);
+    }
+    uint8_t curBr = data.power ? (breath ? 255 : 230) : 0;
+    if (isNight()) {
+      curBr = map(curBr, 0, 255, 0, 60);
+    }
+    
+    // здесь делаем плавные переходы между цветами
+    CRGB ncol = CHSV(data.color, 255, curBr);
+
+    if (ccol != ncol) {
+      if (prevNCol != ncol) {
+        overlayCnt = 0;
+        prevNCol = ncol;
+      }
+      ccol = blend(ccol, ncol, overlayValues[overlayCnt >> 2]);
+      ++overlayCnt;
+    }
   }
   
-  // здесь делаем плавные переходы между цветами
-  CRGB ncol = CHSV(data.color, 255, curBr);
-  CRGB ccol = leds[0];
-
-  static Timer fadeTimer(5);
-
-  // отладка скорости переходов
-  /*static bool flag = true;
-  static uint32_t timer1 = millis();
-  if (ccol == ncol) {
-    if (flag) {
-      DEBUGLN(String("Fade cycle took: ") + (millis() - timer1));
-      flag = false;
-    }
-    timer1 = millis();
-  } else {
-    flag = true;
-  }*/
-
-  if (fadeTimer.period() && (ccol != ncol)) {
-    if (prevNCol != ncol) {
-      overlayCnt = 0;
-      prevNCol = ncol;
-    }
-    ccol = blend(ccol, ncol, overlayValues[overlayCnt >> 2]);
-    ++overlayCnt;
-  }
-
   // анимация подмигивания
   static int16_t brightness = data.bright;
   static uint8_t step = 10;
