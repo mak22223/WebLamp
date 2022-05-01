@@ -35,6 +35,7 @@
 // ============= ВСЯКОЕ =============
 #define MQTT_HEADER "GWL:"  // заголовок пакета данных
 #define MDNS_HOST_NAME "WebLamp" // сетевое имя лампы
+#define UPDATE_SERVER_PORT 8080
 
 // ============= БИБЛЫ =============
 #include <GyverPortal.h>
@@ -113,7 +114,7 @@ WiFiClient espClient;
 PubSubClient mqtt(espClient);
 GyverPortal portal;
 EEManager memory(data, 10000);
-ESP8266WebServer httpServer(8080);
+ESP8266WebServer httpServer(UPDATE_SERVER_PORT);
 ESP8266HTTPUpdateServer httpUpdater;
 
 bool pirFlag = false;
@@ -737,7 +738,7 @@ void setup() {
     // настройка веб-интерфейса обновлений
     httpUpdater.setup(&httpServer);
     httpServer.begin();
-    MDNS.addService("http", "tcp", 8080);
+    MDNS.addService("http", "tcp", UPDATE_SERVER_PORT);
 
     // настраиваем OTA обновления
     signPubKey = new BearSSL::PublicKey(pubkey);
