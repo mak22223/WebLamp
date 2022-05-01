@@ -34,6 +34,7 @@
 
 // ============= ВСЯКОЕ =============
 #define MQTT_HEADER "GWL:"  // заголовок пакета данных
+#define MDNS_HOST_NAME "WebLamp" // сетевое имя лампы
 
 // ============= БИБЛЫ =============
 #include <GyverPortal.h>
@@ -332,7 +333,6 @@ bool checkPortal() {
       data.ntpTimezone = atoi(timezone);
 
       memory.updateNow();
-      // true если submit, для выхода из цикла в AP
       return true;
     }
   }
@@ -372,7 +372,6 @@ void connectMQTT() {
   if (mqtt.connect(id.c_str())) {
     mqtt.subscribe(data.local);
   }
-  /// TODO: убрать
   yield();
 }
 
@@ -592,14 +591,14 @@ int getFromIndex(char* str, int idx, char div) {
 bool sleepModeTick() {
   if (USE_PIR) {
     if (digitalRead(PIR_PIN || (digitalRead(BTN_PIN) == BTN_LEVEL))) {
-    idleTmr.restart();
-    return false;
-  } else {
-    if (idleTmr.elapsed()) {
-      return true;
-    } else {
+      idleTmr.restart();
       return false;
-    }
+    } else {
+      if (idleTmr.elapsed()) {
+        return true;
+      } else {
+        return false;
+      }
     }
   } else {
     return false;
@@ -714,7 +713,7 @@ void setup() {
     }
 
     // запускаем mDNS для легкого доступа к устройству
-    MDNS.begin("WebLamp");
+    MDNS.begin(MDNS_HOST_NAME);
     MDNS.addService("http", "tcp", 80);
 
     // настраиваем OTA обновления
@@ -799,7 +798,6 @@ void loop() {
   memory.tick();  // проверяем обновление настроек
 
   animation(isSleeping, offlineMode ? false : isNight());    // эффект ленты
-  
   
   // DEBUGLN(String("Loop-cycle execution took: ") + String(millis() - loopStart) + String(" msec."));
 }
