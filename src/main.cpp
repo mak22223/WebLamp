@@ -591,8 +591,7 @@ int getFromIndex(char* str, int idx, char div) {
 
 // Проверка на наличие условий перехода в сон
 bool sleepModeTick() {
-  if (USE_PIR) {
-    if (digitalRead(PIR_PIN || (digitalRead(BTN_PIN) == BTN_LEVEL))) {
+    if (digitalRead(PIR_PIN) || (digitalRead(BTN_PIN) == BTN_LEVEL)) {
       idleTmr.restart();
       return false;
     } else {
