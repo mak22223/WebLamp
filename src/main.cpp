@@ -110,6 +110,7 @@ CRGB leds[LED_AMOUNT];
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 GyverPortal portal;
+EEManager memory(data, 10000);
 ESP8266WebServer httpServer(8080);
 ESP8266HTTPUpdateServer httpUpdater;
 
@@ -154,7 +155,7 @@ void webfaceBuilder() {
   BUILD_BEGIN(s);
 
   add.THEME(GP_DARK);
-  add.AJAX_UPDATE("ledL,ledR,ledP,sw,br,col,nm", 2000);
+  add.AJAX_UPDATE("ledL,ledR,ledP,sw,br,col", 2000);
 
   add.LABEL("STATUS");
   add.BLOCK_BEGIN();
@@ -201,7 +202,7 @@ void webfaceBuilder() {
 
   add.LABEL("NTP");
   add.BLOCK_BEGIN();
-  add.LABEL("Night mode enable");
+  add.LABEL("Night mode enable:");
   add.SWITCH("nm", data.nightModeEn);
   add.BREAK();
   add.LABEL("Night end");
@@ -214,9 +215,9 @@ void webfaceBuilder() {
   add.TEXT("ntpSrv", "NTP Server URL", data.ntpUrl);
   add.BREAK();
   add.LABEL("Timezone");
-  add.SELECT("timezone", "UTC-12,UTC-11,UTC-10,UTC-9,UTC-8,UTC-7,UTC-6,\
-UTC-5,UTC-4,UTC-3,UTC-2,UTC-1,UTC+0,UTC+1,UTC+2,UTC+3,UTC+4,\
-UTC+5,UTC+6,UTC+7,UTC+8,UTC+9,UTC+10,UTC+11,UTC+12", data.ntpTimezone + 12);
+  add.SELECT("timezone", "UTC-12,UTC-11,UTC-10,UTC-9,UTC-8,UTC-7,UTC-6,"
+                         "UTC-5,UTC-4,UTC-3,UTC-2,UTC-1,UTC+0,UTC+1,UTC+2,UTC+3,UTC+4,"
+                         "UTC+5,UTC+6,UTC+7,UTC+8,UTC+9,UTC+10,UTC+11,UTC+12", data.ntpTimezone + 12);
   add.BLOCK_END();
   add.SUBMIT("Save");
 
@@ -291,9 +292,6 @@ bool checkPortal() {
       data.color = portal.getInt("col");
       sendPacket();
     }
-    if (portal.click("nm")) {
-      data.nightModeEn = portal.getCheck("nm");
-    }
     if (portal.click()) {
       memory.update();
     }
@@ -307,7 +305,6 @@ bool checkPortal() {
     if (portal.update("br")) portal.answer(data.bright);
     if (portal.update("sw")) portal.answer(data.power);
     if (portal.update("col")) portal.answer(data.color);
-    if (portal.update("nm")) portal.answer(data.nightModeEn);
   }
 
   // формы
@@ -321,6 +318,7 @@ bool checkPortal() {
       portal.copyStr("host", data.host);
       data.port = portal.getInt("port");
 
+      data.nightModeEn = portal.getCheck("nm");
       int tempNightEnd = portal.getInt("nightEnd");
       int tempNightStart = portal.getInt("nightStart");
       if (tempNightEnd < tempNightStart) {
