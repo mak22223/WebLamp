@@ -78,6 +78,8 @@ struct LampData {
   char ntpUrl[32] = "ntp1.stratum2.ru";
   int ntpTimezone = 3;
   bool nightModeEn = true;
+  bool sleepModeEn = true;
+  uint16_t sleepModeTimeout = 30;
   uint16_t port = 1883;
   uint8_t ip[4] = {0, 0, 0, 0};
 
@@ -219,6 +221,16 @@ void webfaceBuilder() {
                          "UTC-5,UTC-4,UTC-3,UTC-2,UTC-1,UTC+0,UTC+1,UTC+2,UTC+3,UTC+4,"
                          "UTC+5,UTC+6,UTC+7,UTC+8,UTC+9,UTC+10,UTC+11,UTC+12", data.ntpTimezone + 12);
   add.BLOCK_END();
+
+  add.LABEL("Miscellaneous");
+  add.BLOCK_BEGIN();
+  add.LABEL("Sleep mode enable:");
+  add.SWITCH("sle", data.sleepModeEn);
+  add.BREAK();
+  add.LABEL("Sleep mode timeout:");
+  add.NUMBER("slt", "Sleep mode timeout, m", data.sleepModeTimeout);
+  add.BLOCK_END();
+
   add.SUBMIT("Save");
 
   add.FORM_END();
@@ -333,6 +345,10 @@ bool checkPortal() {
         timezone[i - 3] = timezone[i];
       }
       data.ntpTimezone = atoi(timezone);
+
+      data.sleepModeEn = portal.getCheck("sle");
+      int16_t tempSleepModeTimeout = portal.getInt("slt");
+      data.sleepModeTimeout = tempSleepModeTimeout > 0 ? tempSleepModeTimeout : 30;
 
       memory.updateNow();
       return true;
@@ -591,6 +607,7 @@ int getFromIndex(char* str, int idx, char div) {
 
 // Проверка на наличие условий перехода в сон
 bool sleepModeTick() {
+  if (USE_PIR && data.sleepModeEn) {
     if (digitalRead(PIR_PIN) || (digitalRead(BTN_PIN) == BTN_LEVEL)) {
       idleTmr.restart();
       return false;
@@ -792,6 +809,9 @@ void loop() {
       DEBUGLN(String("Portal reports about changes!"));
       ntpTime.setPoolServerName(data.ntpUrl);
       ntpTime.setTimeOffset(data.ntpTimezone * 3600);
+
+      idleTmr.setPeriod(data.sleepModeTimeout * 60 * 1000);
+      idleTmr.restart();
 
       mqtt.disconnect();
       mqtt.setServer(data.host, data.port);
