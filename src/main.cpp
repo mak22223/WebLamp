@@ -47,6 +47,7 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <ESP8266mDNS.h>
+#include <ArduinoOTA.h>
 #include "Timer.h"
 
 // ============= ДАННЫЕ =============
@@ -81,6 +82,22 @@ struct LampData {
   uint8_t bright = 50;
   uint8_t color = 0;
 };
+
+const char pubkey[] PROGMEM = R"EOF(
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAz6ebV7QgnfvpveAmfG09
+Bomdl1m+x8kJwGkQLGD8EOokDhqABnLV4qCWSBxvbN4Lk/JZwplKKsjMt93wqvFu
+1aeWlKvOtSGykx4d+M/XZ/LJOU7XFjqrrjvNNQQ70WP5OuMK6a0/pI33xO+zHgkA
+ptu3rO99aCbx1C20lMYTPsX3RDWOFZ873Od0wvoojNQBOmR5Aphkp06cr2az8LSG
+j5zdl3yIW+n8syfEyE93HkKtnHtqvcvcxzb6sTGh00ZWBlYCCRl/m2mSgK//1fPr
+gsg8a+chV0giyXkk/2Ncxd/bqlFAfKtoOXObfiAZcZPAslhbVMakDvcK2OB9SS1g
+BQIDAQAB
+-----END PUBLIC KEY-----
+)EOF";
+
+BearSSL::PublicKey *signPubKey = nullptr;
+BearSSL::HashSHA256 *hash;
+BearSSL::SigningVerifier *sign;
 
 WiFiUDP ntpUdp;
 NTPClient ntpTime(ntpUdp);
@@ -696,6 +713,13 @@ void setup() {
     MDNS.begin("WebLamp");
     MDNS.addService("http", "tcp", 80);
 
+    // настраиваем OTA обновления
+    signPubKey = new BearSSL::PublicKey(pubkey);
+    hash = new BearSSL::HashSHA256();
+    sign = new BearSSL::SigningVerifier(signPubKey);
+    ArduinoOTA.begin(true);
+    Update.installSignature(hash, sign);
+
     // настраиваем и запускаем NTP-клиент
     ntpTime.setPoolServerName(data.ntpUrl);
     ntpTime.setTimeOffset(data.ntpTimezone * 3600);
@@ -745,6 +769,7 @@ void loop() {
   if (offlineMode == false) {
     MDNS.update();
     ntpTime.update();
+    ArduinoOTA.handle();
     heartbeat();    // отправляем пакет что мы онлайн
     mqttTick();     // проверяем входящие
     portal.tick();  // пинаем портал
