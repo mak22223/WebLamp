@@ -49,6 +49,8 @@
 #include <WiFiUdp.h>
 #include <ESP8266mDNS.h>
 #include <ArduinoOTA.h>
+#include <ESP8266WebServer.h>
+#include <ESP8266HTTPUpdateServer.h>
 #include "Timer.h"
 
 // ============= ДАННЫЕ =============
@@ -108,7 +110,9 @@ CRGB leds[LED_AMOUNT];
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 GyverPortal portal;
-EEManager memory(data);
+ESP8266WebServer httpServer(8080);
+ESP8266HTTPUpdateServer httpUpdater;
+
 bool pirFlag = false;
 bool winkFlag = false;
 uint8_t winkTimes = 0;
@@ -716,6 +720,11 @@ void setup() {
     MDNS.begin(MDNS_HOST_NAME);
     MDNS.addService("http", "tcp", 80);
 
+    // настройка веб-интерфейса обновлений
+    httpUpdater.setup(&httpServer);
+    httpServer.begin();
+    MDNS.addService("http", "tcp", 8080);
+
     // настраиваем OTA обновления
     signPubKey = new BearSSL::PublicKey(pubkey);
     hash = new BearSSL::HashSHA256();
@@ -777,6 +786,7 @@ void loop() {
     MDNS.update();
     ntpTime.update();
     ArduinoOTA.handle();
+    httpServer.handleClient();
     heartbeat();    // отправляем пакет что мы онлайн
     mqttTick();     // проверяем входящие
     portal.tick();  // пинаем портал
