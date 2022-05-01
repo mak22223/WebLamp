@@ -165,7 +165,6 @@ void webfaceBuilder() {
   add.BLOCK_BEGIN();
   add.LABEL("Local:");
   add.LED_GREEN("ledL", mqtt.connected());
-  /// TODO: добавить индикаторы для второго remote
   add.LABEL("Remote:");
   add.LED_GREEN("ledR", !onlineTmr.elapsed());
   add.BREAK();
