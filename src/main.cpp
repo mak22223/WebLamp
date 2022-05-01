@@ -33,6 +33,7 @@
 */
 
 // ============= ВСЯКОЕ =============
+#define FW_VERSION "1.0"
 #define MQTT_HEADER "GWL:"  // заголовок пакета данных
 #define MDNS_HOST_NAME "WebLamp" // сетевое имя лампы
 #define UPDATE_SERVER_PORT 8080
@@ -235,6 +236,8 @@ void webfaceBuilder() {
   add.SUBMIT("Save");
 
   add.FORM_END();
+
+  add.LABEL("Firmware version: " FW_VERSION);
 
   BUILD_END();
 }
