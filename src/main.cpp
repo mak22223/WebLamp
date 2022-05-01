@@ -13,7 +13,7 @@
 #define PIR_PIN D6    // пин PIR (ИК-датчика)
 #define LED_AMOUNT 18 // кол-во светодиодов
 #define BTN_LEVEL 1   // 1 - кнопка подключает VCC, 0 - подключает GND
-#define USE_PIR 1     // 1 - использовать PIR (ИК-датчик) на этой лампе
+#define USE_PIR 1     // 1 - использовать PIR (ИК-датчик) на этой лампе, ТАКЖЕ включает/выключает спящий режим
 #define IGNORE_PIR 0  // 1 - игнорировать сигнал PIR (ИК датчика) с удалённой лампы
 
 /*
@@ -120,7 +120,7 @@ const uint8_t hLen = strlen(MQTT_HEADER);
 Timer onlineTmr(18000, false);  // 18 секунд таймаут онлайна
 Timer pirTmr(60000, false);     // 1 минута таймаут пира
 Timer hbTmr(8000);              // 8 секунд период отправки пакета
-Timer idleTmr(30 * 60 * 1000, false);
+Timer idleTmr(30 * 60 * 1000, false); // 30 минут таймаут спящего режима
 
 void webfaceBuilder();
 void buttonTick();
@@ -590,7 +590,8 @@ int getFromIndex(char* str, int idx, char div) {
 
 // Проверка на наличие условий перехода в сон
 bool sleepModeTick() {
-  if ((USE_PIR && digitalRead(PIR_PIN)) || (digitalRead(BTN_PIN) == BTN_LEVEL)) {
+  if (USE_PIR) {
+    if (digitalRead(PIR_PIN || (digitalRead(BTN_PIN) == BTN_LEVEL))) {
     idleTmr.restart();
     return false;
   } else {
@@ -599,6 +600,9 @@ bool sleepModeTick() {
     } else {
       return false;
     }
+    }
+  } else {
+    return false;
   }
 }
 
@@ -767,6 +771,10 @@ void loop() {
   }
 
   if (offlineMode == false) {
+    if (USE_PIR && digitalRead(PIR_PIN)) {
+      pirFlag = 1;  // опрос ИК датчика
+    }
+
     MDNS.update();
     ntpTime.update();
     ArduinoOTA.handle();
@@ -783,10 +791,6 @@ void loop() {
       mqtt.setServer(data.host, data.port);
       connectMQTT();
     } 
-  }
-
-  if (USE_PIR && digitalRead(PIR_PIN)) {
-    pirFlag = 1;  // опрос ИК датчика
   }
 
   bool isSleeping = sleepModeTick();
