@@ -484,7 +484,7 @@ void animation(const bool &isSleeping, const bool &isNight) {
     }
     uint8_t curBr = (data.power && !isSleeping) ? (breath ? 255 : 220) : 0;
     if (isNight) {
-      curBr = map(curBr, 0, 255, 0, 60);
+      curBr = map(curBr, 0, 255, 0, 40);
     }
     
     // здесь делаем плавные переходы между цветами
