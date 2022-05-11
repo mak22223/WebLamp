@@ -197,10 +197,6 @@ void webfaceBuilder() {
   add.TEXT("remote0", "First Remote Name", data.remote0);
   add.BREAK();
   add.TEXT("remote1", "Second Remote Name", data.remote1);
-  add.BREAK();
-  add.TEXT("host", "Host", data.host);
-  add.BREAK();
-  add.NUMBER("port", "Port", data.port);
   add.BLOCK_END();
 
   add.LABEL("NTP");
@@ -214,9 +210,9 @@ void webfaceBuilder() {
   add.LABEL("Night start");
   add.NUMBER("nightStart", "Night start, h", data.nightStart);
   add.BREAK();
-  add.LABEL("NTP Server URL");
-  add.TEXT("ntpSrv", "NTP Server URL", data.ntpUrl);
-  add.BREAK();
+  // add.LABEL("NTP Server URL:");
+  // add.TEXT("ntpSrv", "NTP Server URL", data.ntpUrl);
+  // add.BREAK();
   add.LABEL("Timezone");
   add.SELECT("timezone", "UTC-12,UTC-11,UTC-10,UTC-9,UTC-8,UTC-7,UTC-6,"
                          "UTC-5,UTC-4,UTC-3,UTC-2,UTC-1,UTC+0,UTC+1,UTC+2,UTC+3,UTC+4,"
@@ -325,13 +321,11 @@ bool checkPortal() {
   // формы
   if (portal.form()) {
     if (portal.form("/save")) {
-      portal.copyStr("ssid", data.ssid);
-      portal.copyStr("pass", data.pass);
-      portal.copyStr("local", data.local);
-      portal.copyStr("remote0", data.remote0);
-      portal.copyStr("remote1", data.remote1);
-      portal.copyStr("host", data.host);
-      data.port = portal.getInt("port");
+      portal.copyStrN("ssid", data.ssid, 31);
+      portal.copyStrN("pass", data.pass, 31);
+      portal.copyStrN("local", data.local, 19);
+      portal.copyStrN("remote0", data.remote0, 19);
+      portal.copyStrN("remote1", data.remote1, 19);
 
       data.nightModeEn = portal.getCheck("nm");
       int tempNightEnd = portal.getInt("nightEnd");
@@ -340,10 +334,10 @@ bool checkPortal() {
         data.nightEnd = tempNightEnd;
         data.nightStart = tempNightStart;
       }
-      portal.copyStr("ntpSrv", data.ntpUrl);
+      // portal.copyStrN("ntpSrv", data.ntpUrl, 31);
 
       char timezone[8];
-      portal.copyStr("timezone", timezone);
+      portal.copyStrN("timezone", timezone, 7);
       for (int i = 3; i < 7; ++i) {
         timezone[i - 3] = timezone[i];
       }

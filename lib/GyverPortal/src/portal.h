@@ -191,6 +191,10 @@ public:
     void copyStr(const char* n, char* d) {
         if (server.hasArg(n)) strcpy(d, server.arg(n).c_str());
     }
+    // переписать char строку размера s с компонента к себе
+    void copyStrN(const char* n, char* d, size_t s) {
+        if (server.hasArg(n)) strncpy(d, server.arg(n).c_str(), s);
+    }
 
     // получить число с компонента
     int getInt(const char* n) {
