@@ -630,7 +630,7 @@ void setup() {
   portal.attachBuild(webfaceBuilder);  // подключаем интерфейс
 
   EEPROM.begin(sizeof(data) + 1); // +1 на ключ
-  memory.begin(0, 'a');           // запускаем менеджер памяти
+  memory.begin(0, 'b');           // запускаем менеджер памяти
 
   // я хз, хранить IPAddress в памяти приводит к exception
   // так что вытаскиваем в IPAddress
