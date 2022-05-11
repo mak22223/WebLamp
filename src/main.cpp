@@ -33,7 +33,7 @@
 */
 
 // ============= ВСЯКОЕ =============
-#define FW_VERSION "1.0"
+#define FW_VERSION "1.0-pre"
 #define MQTT_HEADER "GWL:"  // заголовок пакета данных
 #define MDNS_HOST_NAME "WebLamp" // сетевое имя лампы
 #define UPDATE_SERVER_PORT 8080
@@ -57,7 +57,7 @@
 
 // ============= ДАННЫЕ =============
 
-#define DEBUG_ENABLED
+//#define DEBUG_ENABLED
 
 #ifdef DEBUG_ENABLED
 #define DEBUG(x) Serial.print(x)
