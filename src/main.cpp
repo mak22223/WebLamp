@@ -33,7 +33,7 @@
 */
 
 // ============= ВСЯКОЕ =============
-#define FW_VERSION "1.0-pre"
+#define FW_VERSION "1.0"
 #define MQTT_HEADER "GWL:"  // заголовок пакета данных
 #define MDNS_HOST_NAME "WebLamp" // сетевое имя лампы
 #define UPDATE_SERVER_PORT 8080
@@ -204,16 +204,16 @@ void webfaceBuilder() {
   add.LABEL("Night mode enable:");
   add.SWITCH("nm", data.nightModeEn);
   add.BREAK();
-  add.LABEL("Night end");
+  add.LABEL("Night end:");
   add.NUMBER("nightEnd", "Night end, h", data.nightEnd);
   add.BREAK();
-  add.LABEL("Night start");
+  add.LABEL("Night start:");
   add.NUMBER("nightStart", "Night start, h", data.nightStart);
   add.BREAK();
   // add.LABEL("NTP Server URL:");
   // add.TEXT("ntpSrv", "NTP Server URL", data.ntpUrl);
   // add.BREAK();
-  add.LABEL("Timezone");
+  add.LABEL("Timezone:");
   add.SELECT("timezone", "UTC-12,UTC-11,UTC-10,UTC-9,UTC-8,UTC-7,UTC-6,"
                          "UTC-5,UTC-4,UTC-3,UTC-2,UTC-1,UTC+0,UTC+1,UTC+2,UTC+3,UTC+4,"
                          "UTC+5,UTC+6,UTC+7,UTC+8,UTC+9,UTC+10,UTC+11,UTC+12", data.ntpTimezone + 12);
@@ -245,6 +245,7 @@ void buttonTick(bool isSleeping) {
   if (isSleeping && !sleepFlag) {
     sleepFlag = true;
   }
+  // разрещение работы кнопки только после завершения первого нажатия
   if (!isSleeping && sleepFlag) {
     sleepFlag = btn.hasClicks() || btn.releaseStep() ? false : true;
   }
@@ -269,6 +270,7 @@ void buttonTick(bool isSleeping) {
         break;
     }
 
+    // если текущий режим оффлайн, не отправлять MQTT пакеты
     if (offlineMode == false && clickCount > 0) {
       sendPacket();
     }
@@ -468,7 +470,6 @@ void animation(const bool &isSleeping, const bool &isNight) {
 
   if (tmr.period()) {
     // переключаем локальную яркость для "дыхания"
-    
     if (!onlineTmr.elapsed()) {
         breathDivider = 30;
         if (!pirTmr.elapsed()) {
@@ -483,6 +484,7 @@ void animation(const bool &isSleeping, const bool &isNight) {
     } else {
       breath = true;
     }
+
     uint8_t curBr = (data.power && !isSleeping) ? (breath ? 255 : 220) : 0;
     if (isNight) {
       curBr = map(curBr, 0, 255, 0, 40);
@@ -566,7 +568,6 @@ uint8_t localPortal(IPAddress ip) {
   WiFi.mode(previousWiFimode);
   return exitCode;
 }
-
 
 // анимация работы локал портала
 void loadAnimation(CRGB color) {
@@ -763,15 +764,14 @@ void setup() {
   if (USE_PIR) {
     idleTmr.restart();
   }
-  
 }
 
 void loop() {
   // uint32_t loopStart = millis();
 
-  static uint32_t logTimer = 0;
-  if (logTimer < millis()) {
-    logTimer = millis() + 1000;
+  // static uint32_t logTimer = 0;
+  // if (logTimer < millis()) {
+  //   logTimer = millis() + 1000;
     // DEBUGLN(String("Current time: ") + String(ntpTime.getFormattedTime()));
     // DEBUGLN(String("Current timezone: ") + String(data.ntpTimezone));
     // DEBUGLN(String("Current night mode state: ") + String(data.nightModeEn));
@@ -788,7 +788,7 @@ void loop() {
     // DEBUGLN(String("My comrades are: "));
     // DEBUGLN(String(data.remote0));
     // DEBUGLN(String(data.remote1));
-  }
+  // }
 
   if (offlineMode == false) {
     if (USE_PIR && digitalRead(PIR_PIN)) {
@@ -814,7 +814,7 @@ void loop() {
       mqtt.disconnect();
       mqtt.setServer(data.host, data.port);
       connectMQTT();
-    } 
+    }
   }
 
   bool isSleeping = sleepModeTick();
