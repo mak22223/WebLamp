@@ -263,6 +263,7 @@ void buttonTick(bool isSleeping) {
         break;
       case 3:   // подмигнуть
         winkFlag = 1;
+        winkTimes = 1;
         break;
       default:
         break;
