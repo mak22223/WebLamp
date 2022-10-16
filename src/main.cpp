@@ -146,10 +146,10 @@ void wink();
 void brightLoop(int from, int to, int step);
 void loadAnimation(CRGB color);
 int getFromIndex(char* str, int idx, char div = ',');
-void animation(const bool &isSleeping = false, const bool &isNight = false);
+void animation(const bool isSleeping, const bool isNight, const bool isOffline);
 
 inline bool isNight() {
-  return (ntpTime.getHours() < data.nightEnd || ntpTime.getHours() >= data.nightStart) && data.nightModeEn ? true : false;
+  return (ntpTime.getHours() < data.nightEnd || ntpTime.getHours() >= data.nightStart) && data.nightModeEn && ntpTime.isTimeSet() ? true : false;
 }
 
 //////////////////////////////////////////////////
@@ -457,7 +457,7 @@ void heartbeat() {
 ///////////////////////////////////////////////
 
 // выводим эффект на ленту
-void animation(const bool &isSleeping, const bool &isNight) {
+void animation(const bool isSleeping, const bool isNight, const bool isOffline) {
   static Timer tmr(30);
   static bool breath;   // здесь отвечает за погашение яркости для дыхания
   static uint8_t breathDivider = 30;
@@ -506,7 +506,7 @@ void animation(const bool &isSleeping, const bool &isNight) {
   // анимация подмигивания
   static uint8_t correctedBrightness = data.bright;
   
-  if (winkTimes != 0) {
+  if (winkTimes != 0 && !isOffline) {
     static int16_t brightness = data.bright;
     static uint8_t step = 10;
     static bool dir = false;
@@ -822,7 +822,7 @@ void loop() {
   buttonTick(isSleeping);   // действия кнопки
   memory.tick();  // проверяем обновление настроек
 
-  animation(isSleeping, offlineMode ? false : isNight());    // эффект ленты
+  animation(isSleeping, isNight(), offlineMode);    // эффект ленты
   
   // DEBUGLN(String("Loop-cycle execution took: ") + String(millis() - loopStart) + String(" msec."));
 }
