@@ -245,9 +245,9 @@ void buttonTick(bool isSleeping) {
   if (isSleeping && !sleepFlag) {
     sleepFlag = true;
   }
-  // разрещение работы кнопки только после завершения первого нажатия
-  if (!isSleeping && sleepFlag) {
-    sleepFlag = btn.hasClicks() || btn.releaseStep() ? false : true;
+  // разрещение работы кнопки только после завершения серии нажатий или срабатывания PIR
+  if (sleepFlag) {
+    sleepFlag = btn.hasClicks() || btn.releaseStep() || !isSleeping ? false : true;
   }
   
   if (!sleepFlag) {
