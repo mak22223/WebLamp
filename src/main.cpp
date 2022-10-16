@@ -33,7 +33,7 @@
 */
 
 // ============= ВСЯКОЕ =============
-#define FW_VERSION "1.0"
+#define SETTINGS_VER 'c'
 #define MQTT_HEADER "GWL:"  // заголовок пакета данных
 #define MDNS_HOST_NAME "WebLamp" // сетевое имя лампы
 #define UPDATE_SERVER_PORT 8080
@@ -75,14 +75,14 @@ struct LampData {
   char local[20] = "WebLamp_1";
   char remote0[20] = "WebLamp_2";
   char remote1[20] = "WebLamp_3";
-  char host[32] = "broker.mqttdashboard.com";
+  char host[32] = "194.135.20.187";
   int nightEnd = 8, nightStart = 20;
-  char ntpUrl[32] = "ntp1.stratum2.ru";
+  char ntpUrl[32] = "ntp5.ntp-servers.net";
   int ntpTimezone = 3;
   bool nightModeEn = true;
   bool sleepModeEn = true;
   uint16_t sleepModeTimeout = 30;
-  uint16_t port = 1883;
+  uint16_t port = 1900;
   uint8_t ip[4] = {0, 0, 0, 0};
 
   bool power = 1;
@@ -631,7 +631,7 @@ void setup() {
   portal.attachBuild(webfaceBuilder);  // подключаем интерфейс
 
   EEPROM.begin(sizeof(data) + 1); // +1 на ключ
-  memory.begin(0, 'b');           // запускаем менеджер памяти
+  memory.begin(0, SETTINGS_VER);           // запускаем менеджер памяти
 
   // я хз, хранить IPAddress в памяти приводит к exception
   // так что вытаскиваем в IPAddress
