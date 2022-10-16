@@ -369,16 +369,18 @@ bool checkPortal() {
 // опрашиваем mqtt
 void mqttTick() {
   if (WiFi.status() != WL_CONNECTED) return;  // wifi не подключен
-  if (!mqtt.connected()) connectMQTT();
-  else {
+
+  if (mqtt.connected()) {
     if (!startFlag) {
       startFlag = 1;
       char str[] = MQTT_HEADER "2";  // +2
       mqtt.publish(data.remote0, str); // запрос цвета у обеих ламп
       mqtt.publish(data.remote1, str); 
     }
-  }
   mqtt.loop();
+  } else {
+    connectMQTT();
+  }
 }
 
 void connectMQTT() {
@@ -390,7 +392,7 @@ void connectMQTT() {
   if (mqtt.connect(id.c_str())) {
     mqtt.subscribe(data.local);
   }
-  yield();
+  // yield();
 }
 
 // тут нам прилетел пакет от удалённой лампы
