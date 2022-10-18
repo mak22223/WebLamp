@@ -33,6 +33,7 @@
 */
 
 // ============= ВСЯКОЕ =============
+#define FW_VERSION "1.0.1"
 #define SETTINGS_VER 'c'
 #define MQTT_HEADER "GWL:"  // заголовок пакета данных
 #define MDNS_HOST_NAME "WebLamp" // сетевое имя лампы
@@ -377,7 +378,7 @@ void mqttTick() {
       mqtt.publish(data.remote0, str); // запрос цвета у обеих ламп
       mqtt.publish(data.remote1, str); 
     }
-  mqtt.loop();
+    mqtt.loop();
   } else {
     connectMQTT();
   }
